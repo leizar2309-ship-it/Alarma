@@ -5,41 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1a73e8">
     <link rel="manifest" href="manifest.json">
-    <title>Alarma con Repetición</title>
+    <title>Alarma Total Pro</title>
     <style>
         body { font-family: sans-serif; background: #f0f2f5; padding: 15px; display: flex; flex-direction: column; align-items: center; }
         .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        h2 { color: #1a73e8; text-align: center; margin-bottom: 5px; }
-        label { display: block; margin-top: 15px; font-weight: bold; font-size: 0.85rem; color: #444; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; font-size: 1rem; }
+        h2 { color: #1a73e8; text-align: center; }
+        label { display: block; margin-top: 15px; font-weight: bold; font-size: 0.85rem; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; }
         button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
-        .config-sonido { background: #e8f0fe; padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #1a73e8; }
-        .btn-test { background: #34a853; margin-bottom: 5px; }
-        .btn-stop { background: #f39c12; display: none; font-size: 1.2rem; padding: 20px; animation: pulse 1.5s infinite; }
-        .item { background: #fff; margin-top: 10px; padding: 15px; border-radius: 12px; border-left: 5px solid #1a73e8; width: 100%; max-width: 400px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-        .badge-aviso { background: #ff4757; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; }
+        .config-sonido { background: #e8f0fe; padding: 15px; border-radius: 12px; border: 1px dashed #1a73e8; }
+        .btn-stop { background: #f39c12; display: none; padding: 20px; animation: pulse 1.5s infinite; }
+        .status-battery { font-size: 0.7rem; color: #ff4757; text-align: center; margin-bottom: 10px; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
+        .item { background: #fff; margin-top: 10px; padding: 15px; border-radius: 12px; width: 100%; max-width: 400px; display: flex; justify-content: space-between; align-items: center; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>⏰ Alarma Personalizada</h2>
+    <h2>⏰ Alarma Anti-Bloqueo</h2>
+    <p class="status-battery">⚠️ Mantén esta pestaña abierta para que suene</p>
     
     <div class="config-sonido">
-        <label>🎵 1. Configura tu Tono:</label>
+        <label>🎵 1. Sonido de Alarma:</label>
         <input type="file" id="audioFile" accept="audio/*">
-        <button class="btn-test" onclick="probarSonido()">🔈 Probar Sonido</button>
+        <button style="background:#34a853" onclick="probarSonido()">🔈 Probar Sonido</button>
         <button id="btnStop" class="btn-stop" onclick="detenerAlarma()">🔕 DETENER ALARMA</button>
     </div>
 
-    <label>2. Tarea:</label>
     <input type="text" id="tarea" placeholder="¿Qué recordar?">
-    
-    <label>3. Fecha y Hora:</label>
     <input type="datetime-local" id="fecha">
 
-    <label>4. Repetir alarma cada:</label>
+    <label>Repetir cada:</label>
     <select id="intervaloRepeticion">
         <option value="0">No repetir</option>
         <option value="5">5 minutos</option>
@@ -48,9 +45,9 @@
         <option value="60">1 hora</option>
     </select>
 
-    <label><input type="checkbox" id="avisoPrevio" style="width: auto;"> Avisar cada hora desde un día antes</label>
+    <label><input type="checkbox" id="avisoPrevio" style="width:auto"> Aviso 24h (cada hora)</label>
     
-    <button onclick="pedirPermisoYGuardar()">💾 Guardar Recordatorio</button>
+    <button onclick="activarYGuardar()">💾 Activar y Guardar</button>
 </div>
 
 <div id="lista"></div>
@@ -63,6 +60,19 @@
     let recordatorios = JSON.parse(localStorage.getItem('pwa_notas_final')) || [];
     const audioPlayer = document.getElementById('alarmaAudio');
     const btnStop = document.getElementById('btnStop');
+    let wakeLock = null;
+
+    // Función para evitar que el celular "duerma" el navegador
+    async function activarWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLock = await navigator.wakeLock.request('screen');
+                console.log("Pantalla bloqueada para no dormir");
+            }
+        } catch (err) {
+            console.log("WakeLock no soportado");
+        }
+    }
 
     document.getElementById('audioFile').onchange = function() {
         if (this.files[0]) {
@@ -72,7 +82,7 @@
     };
 
     function probarSonido() {
-        if (!audioPlayer.src) return alert("Selecciona un audio primero");
+        if (!audioPlayer.src) return alert("Selecciona un audio");
         audioPlayer.play().then(() => { btnStop.style.display = "block"; });
     }
 
@@ -82,9 +92,15 @@
         btnStop.style.display = "none";
     }
 
-    async function pedirPermisoYGuardar() {
-        if (await Notification.requestPermission() === 'granted') agregar();
-        else alert("Debes permitir notificaciones para que la alarma suene.");
+    async function activarYGuardar() {
+        // Pedir permisos y activar el motor de supervivencia
+        const permiso = await Notification.requestPermission();
+        if (permiso === 'granted') {
+            await activarWakeLock();
+            agregar();
+        } else {
+            alert("Necesitas aceptar las notificaciones");
+        }
     }
 
     function agregar() {
@@ -93,7 +109,7 @@
         const int = document.getElementById('intervaloRepeticion').value;
         const previo = document.getElementById('avisoPrevio').checked;
         
-        if(!t.value || !f.value) return alert("Completa los datos");
+        if(!t.value || !f.value) return alert("Faltan datos");
 
         recordatorios.push({
             texto: t.value,
@@ -117,10 +133,9 @@
             <div class="item">
                 <div>
                     <strong>${r.texto}</strong><br>
-                    <small>${new Date(r.tiempo).toLocaleString()}</small><br>
-                    ${r.intervalo > 0 ? `<span class="badge-aviso">Repite cada ${r.intervalo} min</span>` : ''}
+                    <small>${new Date(r.tiempo).toLocaleString()}</small>
                 </div>
-                <button style="width:auto; background:red; padding: 8px" onclick="borrar(${r.id})">🗑️</button>
+                <button style="background:red; width:auto; padding:5px" onclick="borrar(${r.id})">X</button>
             </div>
         `).join('');
     }
@@ -131,47 +146,52 @@
         actualizarVista();
     }
 
-    // RELOJ DEL SISTEMA
+    // EL RELOJ DE ALARMA
     setInterval(() => {
         const ahora = Date.now();
         recordatorios.forEach(r => {
-            // 1. Lógica Aviso 24h (Cada hora)
-            if (r.avisoPrevioActivo) {
-                const unDiaMs = 24 * 60 * 60 * 1000;
-                if (ahora >= (r.tiempo - unDiaMs) && ahora < r.tiempo) {
-                    if (ahora - r.ultimoAvisoPrevio >= 3600000) { // 1 hora
-                        lanzarNotificacion(`Falta poco: ${r.texto}`, false);
-                        r.ultimoAvisoPrevio = ahora;
-                        localStorage.setItem('pwa_notas_final', JSON.stringify(recordatorios));
-                    }
+            // Lógica Aviso 24h
+            if (r.avisoPrevioActivo && ahora >= (r.tiempo - 86400000) && ahora < r.tiempo) {
+                if (ahora - r.ultimoAvisoPrevio >= 3600000) {
+                    dispararAlarma(r, `Falta poco: ${r.texto}`, false);
+                    r.ultimoAvisoPrevio = ahora;
+                    localStorage.setItem('pwa_notas_final', JSON.stringify(recordatorios));
                 }
             }
 
-            // 2. Lógica Alarma Principal y Repetición
+            // Alarma Principal
             if (ahora >= r.tiempo && !r.avisado) {
-                // Si tiene repetición, actualizamos el tiempo para el futuro
                 if (r.intervalo > 0) {
                     r.tiempo = ahora + (r.intervalo * 60000);
                 } else {
                     r.avisado = true;
                 }
-                
                 localStorage.setItem('pwa_notas_final', JSON.stringify(recordatorios));
-                lanzarNotificacion(`¡HORA DE!: ${r.texto}`, true);
+                dispararAlarma(r, `¡HORA DE!: ${r.texto}`, true);
                 actualizarVista();
             }
         });
     }, 5000);
 
-    function lanzarNotificacion(msj, sonar) {
+    function dispararAlarma(obj, msj, sonar) {
+        // Enviar notificación al sistema (aparece en pantalla bloqueada)
         if (Notification.permission === 'granted') {
             navigator.serviceWorker.ready.then(reg => {
-                reg.showNotification("🔔 Alarma", { body: msj, vibrate: [500, 100, 500], tag: 'alarma' });
+                reg.showNotification("⏰ ALARMA", {
+                    body: msj,
+                    icon: 'https://cdn-icons-png.flaticon.com/512/182/182321.png',
+                    vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40, 450, 110, 200, 110, 170, 40],
+                    tag: 'alarma-final',
+                    renotify: true
+                });
             });
         }
+        
         if (sonar) {
             audioPlayer.play().then(() => { btnStop.style.display = "block"; });
         }
+        
+        // El alert ayuda a despertar la pantalla en muchos Android
         alert(msj);
     }
 
