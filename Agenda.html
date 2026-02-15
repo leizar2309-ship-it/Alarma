@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a73e8">
+    <link rel="manifest" href="manifest.json">
+    <title>Super Recordador PWA</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        h2 { color: #1a73e8; text-align: center; }
+        input, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; }
+        button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .item { background: #fff; margin-top: 10px; padding: 15px; border-radius: 10px; border-left: 5px solid #1a73e8; width: 100%; max-width: 400px; display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>🔔 Recordador Pro</h2>
+    <p style="font-size: 0.8rem; color: #666; text-align: center;">Para que funcione, "Instala" la app en tu inicio y no la cierres por completo.</p>
+    
+    <label>Tarea:</label>
+    <input type="text" id="tarea" placeholder="¿Qué necesitas recordar?">
+    
+    <label>Fecha y Hora:</label>
+    <input type="datetime-local" id="fecha">
+    
+    <button onclick="pedirPermisoYGuardar()">Guardar Recordatorio</button>
+</div>
+
+<div id="lista"></div>
+
+<script>
+    // Registrar el Service Worker para que sea una PWA
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+            .then(() => console.log("Service Worker registrado correctamente."));
+    }
+
+    let recordatorios = JSON.parse(localStorage.getItem('pwa_notas')) || [];
+
+    async function pedirPermisoYGuardar() {
+        const permiso = await Notification.requestPermission();
+        if (permiso === 'granted') {
+            agregar();
+        } else {
+            alert("Necesitas activar las notificaciones para que la app funcione.");
+        }
+    }
+
+    function agregar() {
+        const t = document.getElementById('tarea');
+        const f = document.getElementById('fecha');
+        if(!t.value || !f.value) return alert("Faltan datos");
+
+        const nuevo = {
+            texto: t.value,
+            tiempo: new Date(f.value).getTime(),
+            id: Date.now(),
+            avisado: false
+        };
+
+        recordatorios.push(nuevo);
+        localStorage.setItem('pwa_notas', JSON.stringify(recordatorios));
+        t.value = '';
+        actualizarVista();
+    }
+
+    function actualizarVista() {
+        const listado = document.getElementById('lista');
+        listado.innerHTML = recordatorios.map(r => `
+            <div class="item" style="${r.avisado ? 'opacity:0.5' : ''}">
+                <div>
+                    <strong>${r.texto}</strong><br>
+                    <small>${new Date(r.tiempo).toLocaleString()}</small>
+                </div>
+                <button style="width:auto; background:red; padding: 5px" onclick="borrar(${r.id})">X</button>
+            </div>
+        `).join('');
+    }
+
+    function borrar(id) {
+        recordatorios = recordatorios.filter(r => r.id !== id);
+        localStorage.setItem('pwa_notas', JSON.stringify(recordatorios));
+        actualizarVista();
+    }
+
+    // El chequeo constante
+    setInterval(() => {
+        const ahora = Date.now();
+        recordatorios.forEach(r => {
+            if (ahora >= r.tiempo && !r.avisado) {
+                r.avisado = true;
+                localStorage.setItem('pwa_notas', JSON.stringify(recordatorios));
+                actualizarVista();
+
+                // Enviar notificación de sistema
+                if (Notification.permission === 'granted') {
+                    navigator.serviceWorker.ready.then(registration => {
+                        registration.showNotification("🔔 Recordatorio", {
+                            body: r.texto,
+                            vibrate: [200, 100, 200],
+                            tag: 'alarma-' + r.id
+                        });
+                    });
+                }
+                alert("¡HORA DE: " + r.texto + "!");
+            }
+        });
+    }, 5000);
+
+    actualizarVista();
+</script>
+</body>
+</html>
