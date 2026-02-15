@@ -5,38 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1a73e8">
     <link rel="manifest" href="manifest.json">
-    <title>Mi Alarma Pro</title>
+    <title>Alarma Persistente</title>
     <style>
-        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        body { font-family: sans-serif; background: #f0f2f5; padding: 15px; display: flex; flex-direction: column; align-items: center; }
         .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
         h2 { color: #1a73e8; text-align: center; margin-bottom: 5px; }
-        label { display: block; margin-top: 15px; font-weight: bold; font-size: 0.9rem; }
-        input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; }
+        label { display: block; margin-top: 15px; font-weight: bold; font-size: 0.85rem; color: #444; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; font-size: 1rem; }
         button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
-        .config-sonido { background: #e8f0fe; padding: 15px; border-radius: 12px; margin: 15px 0; border: 1px dashed #1a73e8; }
-        .btn-test { background: #34a853; font-size: 0.8rem; }
-        .btn-stop { background: #f39c12; display: none; }
-        .item { background: #fff; margin-top: 10px; padding: 15px; border-radius: 10px; border-left: 5px solid #1a73e8; width: 100%; max-width: 400px; display: flex; justify-content: space-between; align-items: center; }
-        .btn-borrar { background: #ff4757; width: auto; padding: 5px 10px; }
+        .config-sonido { background: #e8f0fe; padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #1a73e8; }
+        .btn-stop { background: #f39c12; display: none; font-size: 1.2rem; padding: 20px; animation: pulse 1.5s infinite; }
+        .item { background: #fff; margin-top: 10px; padding: 15px; border-radius: 12px; border-left: 5px solid #1a73e8; width: 100%; max-width: 400px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>🔔 Alarma Personalizada</h2>
+    <h2>⏰ Alarma Inteligente</h2>
     
     <div class="config-sonido">
-        <label>🎵 1. Elige tu tono:</label>
+        <label>🎵 Selecciona tu Tono:</label>
         <input type="file" id="audioFile" accept="audio/*">
-        <button class="btn-test" onclick="probarSonido()">🔈 Probar Sonido</button>
-        <button id="btnStop" class="btn-stop" onclick="detenerAlarma()">🔕 Detener Alarma</button>
+        <button id="btnStop" class="btn-stop" onclick="detenerAlarma()">🔕 DETENER ALARMA</button>
     </div>
 
-    <label>2. ¿Qué recordar?</label>
-    <input type="text" id="tarea" placeholder="Ej: Tomar agua">
-    
-    <label>3. ¿Cuándo?</label>
+    <input type="text" id="tarea" placeholder="¿Qué recordar?">
     <input type="datetime-local" id="fecha">
+
+    <label><input type="checkbox" id="avisoPrevio" style="width: auto;"> Avisar cada hora desde un día antes</label>
     
     <button onclick="pedirPermisoYGuardar()">💾 Guardar Recordatorio</button>
 </div>
@@ -46,31 +43,18 @@
 <audio id="alarmaAudio" loop playsinline></audio>
 
 <script>
-    // Registro de Service Worker
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
-    }
+    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
 
-    let recordatorios = JSON.parse(localStorage.getItem('pwa_notas_v2')) || [];
+    let recordatorios = JSON.parse(localStorage.getItem('pwa_notas_v3')) || [];
     const audioPlayer = document.getElementById('alarmaAudio');
     const btnStop = document.getElementById('btnStop');
 
-    // Manejar el archivo de sonido
     document.getElementById('audioFile').onchange = function() {
-        const file = this.files[0];
-        if (file) {
-            audioPlayer.src = URL.createObjectURL(file);
+        if (this.files[0]) {
+            audioPlayer.src = URL.createObjectURL(this.files[0]);
             audioPlayer.load();
-            alert("✅ Sonido cargado.");
         }
     };
-
-    function probarSonido() {
-        if (!audioPlayer.src) return alert("Primero selecciona un archivo de audio.");
-        audioPlayer.play().then(() => {
-            btnStop.style.display = "block";
-        }).catch(() => alert("Toca la pantalla para permitir el audio."));
-    }
 
     function detenerAlarma() {
         audioPlayer.pause();
@@ -79,28 +63,37 @@
     }
 
     async function pedirPermisoYGuardar() {
-        const permiso = await Notification.requestPermission();
-        if (permiso === 'granted') {
-            agregar();
-        } else {
-            alert("Activa las notificaciones para que la alarma funcione.");
-        }
+        if (await Notification.requestPermission() === 'granted') agregar();
+        else alert("Permite las notificaciones para avisarte.");
     }
 
     function agregar() {
         const t = document.getElementById('tarea');
         const f = document.getElementById('fecha');
-        if(!t.value || !f.value) return alert("Completa los campos.");
+        const previo = document.getElementById('avisoPrevio').checked;
+        
+        if(!t.value || !f.value) return alert("Completa los datos");
 
         recordatorios.push({
             texto: t.value,
             tiempo: new Date(f.value).getTime(),
             id: Date.now(),
-            avisado: false
+            avisado: false,
+            avisoPrevioActivo: previo,
+            ultimoAvisoPrevio: 0
         });
 
-        localStorage.setItem('pwa_notas_v2', JSON.stringify(recordatorios));
-        t.value = '';
+        localStorage.setItem('pwa_notas_v3', JSON.stringify(recordatorios));
+        actualizarVista();
+    }
+
+    // Lógica de posponer (Snooze)
+    function posponer(id, minutos) {
+        const r = recordatorios.find(x => x.id === id);
+        r.tiempo = Date.now() + (minutos * 60000);
+        r.avisado = false;
+        detenerAlarma();
+        localStorage.setItem('pwa_notas_v3', JSON.stringify(recordatorios));
         actualizarVista();
     }
 
@@ -108,50 +101,62 @@
         const listado = document.getElementById('lista');
         recordatorios.sort((a, b) => a.tiempo - b.tiempo);
         listado.innerHTML = recordatorios.map(r => `
-            <div class="item" style="${r.avisado ? 'opacity:0.5' : ''}">
-                <div>
-                    <strong>${r.texto}</strong><br>
-                    <small>${new Date(r.tiempo).toLocaleString()}</small>
+            <div class="item">
+                <strong>${r.texto}</strong><br>
+                <small>${new Date(r.tiempo).toLocaleString()}</small>
+                <div style="margin-top:10px">
+                    <button style="width:auto; padding:5px; background:#6c757d" onclick="posponer(${r.id}, 10)">+10min</button>
+                    <button style="width:auto; padding:5px; background:#6c757d" onclick="posponer(${r.id}, 30)">+30min</button>
+                    <button style="width:auto; padding:5px; background:red" onclick="borrar(${r.id})">Eliminar</button>
                 </div>
-                <button class="btn-borrar" onclick="borrar(${r.id})">Borrar</button>
             </div>
         `).join('');
     }
 
     function borrar(id) {
         recordatorios = recordatorios.filter(r => r.id !== id);
-        localStorage.setItem('pwa_notas_v2', JSON.stringify(recordatorios));
+        localStorage.setItem('pwa_notas_v3', JSON.stringify(recordatorios));
         actualizarVista();
     }
 
-    // RELOJ DE ALARMA
     setInterval(() => {
         const ahora = Date.now();
         recordatorios.forEach(r => {
+            // Lógica de Aviso Previo (1 día antes, cada hora)
+            if (r.avisoPrevioActivo && !r.avisado) {
+                const unDiaEnMs = 24 * 60 * 60 * 1000;
+                const unaHoraEnMs = 60 * 60 * 1000;
+                
+                if (ahora >= (r.tiempo - unDiaEnMs) && ahora < r.tiempo) {
+                    if (ahora - r.ultimoAvisoPrevio >= unaHoraEnMs) {
+                        lanzarAlarma(`Falta menos de un día para: ${r.texto}`, false);
+                        r.ultimoAvisoPrevio = ahora;
+                    }
+                }
+            }
+
+            // Lógica de Alarma Principal
             if (ahora >= r.tiempo && !r.avisado) {
                 r.avisado = true;
-                localStorage.setItem('pwa_notas_v2', JSON.stringify(recordatorios));
+                localStorage.setItem('pwa_notas_v3', JSON.stringify(recordatorios));
+                lanzarAlarma(`¡ES HORA!: ${r.texto}`, true);
                 actualizarVista();
-
-                // Notificación
-                if (Notification.permission === 'granted') {
-                    navigator.serviceWorker.ready.then(reg => {
-                        reg.showNotification("⏰ ¡ATENCIÓN!", {
-                            body: r.texto,
-                            vibrate: [500, 100, 500]
-                        });
-                    });
-                }
-
-                // Sonar
-                audioPlayer.play().then(() => {
-                    btnStop.style.display = "block";
-                }).catch(e => console.log("Permiso de audio requerido"));
-                
-                alert("⏰ HORA DE: " + r.texto);
             }
         });
-    }, 3000);
+    }, 5000);
+
+    function lanzarAlarma(mensaje, sonarFuerte) {
+        if (Notification.permission === 'granted') {
+            navigator.serviceWorker.ready.then(reg => {
+                reg.showNotification("🔔 Alarma", { body: mensaje, vibrate: [500, 100, 500], tag: 'alarma' });
+            });
+        }
+        
+        if (sonarFuerte) {
+            audioPlayer.play().then(() => { btnStop.style.display = "block"; });
+        }
+        alert(mensaje);
+    }
 
     actualizarVista();
 </script>
