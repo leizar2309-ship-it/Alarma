@@ -2,20 +2,19 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#1a73e8">
     <link rel="manifest" href="manifest.json">
-    <title>Alarma Pro v3</title>
+    <title>Alarma Pro Definitiva</title>
     <style>
         body { font-family: sans-serif; background: #f0f2f5; padding: 15px; display: flex; flex-direction: column; align-items: center; }
         .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
         h2 { color: #1a73e8; text-align: center; margin-bottom: 15px; }
         label { display: block; margin-top: 15px; font-weight: bold; font-size: 0.85rem; color: #444; }
         input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; font-size: 1rem; }
-        button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:active { transform: scale(0.97); }
+        button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
         .config-sonido { background: #e8f0fe; padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #1a73e8; text-align: center; }
-        .btn-test { background: #34a853; font-size: 0.9rem; } /* Botón permanente de prueba */
+        .btn-test { background: #34a853; }
         .btn-stop { background: #ff4757; display: none; padding: 25px; font-size: 1.3rem; animation: pulse 1s infinite; margin-top: 20px; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(255, 71, 87, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0); } }
         .item { background: #fff; margin-top: 10px; padding: 15px; border-radius: 12px; width: 100%; max-width: 400px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
@@ -30,16 +29,17 @@
     <div class="config-sonido">
         <label>🎵 Sonido de Alarma:</label>
         <input type="file" id="audioFile" accept="audio/*">
-        <button class="btn-test" onclick="probarSonido()">🔈 Probar Sonido</button>
+        <button class="btn-test" id="btnPrueba" onclick="probarSonido()">🔈 Probar Sonido</button>
     </div>
 
-    <input type="text" id="tarea" placeholder="¿Qué recordar?">
+    <input type="text" id="tarea" placeholder="¿Qué hay que hacer?">
     <input type="datetime-local" id="fecha">
 
     <label>Repetir cada:</label>
     <select id="intervaloRepeticion">
         <option value="0">No repetir</option>
-        <option value="1">1 minuto</option> <option value="5">5 minutos</option>
+        <option value="1">1 minuto</option>
+        <option value="5">5 minutos</option>
         <option value="10">10 minutos</option>
         <option value="30">30 minutos</option>
         <option value="60">1 hora</option>
@@ -47,7 +47,7 @@
 
     <label><input type="checkbox" id="avisoPrevio" style="width:auto"> Aviso 24h (cada hora)</label>
     
-    <button onclick="activarYGuardar()">💾 Activar y Guardar</button>
+    <button onclick="guardarTodo()">💾 Guardar Recordatorio</button>
 
     <button id="btnStop" class="btn-stop" onclick="detenerAlarma()">🔕 DETENER SONIDO</button>
 </div>
@@ -57,60 +57,72 @@
 <audio id="alarmaAudio" loop playsinline></audio>
 
 <script>
-    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
-
-    let recordatorios = JSON.parse(localStorage.getItem('pwa_notas_final')) || [];
-    const audioPlayer = document.getElementById('alarmaAudio');
-    const btnStop = document.getElementById('btnStop');
-    let wakeLock = null;
-
-    async function activarWakeLock() {
-        try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } 
-        catch (err) { console.log("WakeLock no soportado"); }
+    // Registrar el Service Worker inmediatamente
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(err => console.log("SW error", err));
     }
 
+    let recordatorios = JSON.parse(localStorage.getItem('pwa_notas_final_v4')) || [];
+    const audioPlayer = document.getElementById('alarmaAudio');
+    const btnStop = document.getElementById('btnStop');
+
+    // Cargar audio al seleccionar archivo
     document.getElementById('audioFile').onchange = function() {
-        if (this.files[0]) {
-            audioPlayer.src = URL.createObjectURL(this.files[0]);
+        const file = this.files[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+            audioPlayer.src = url;
             audioPlayer.load();
+            console.log("Audio cargado correctamente");
         }
     };
 
     function probarSonido() {
-        if (!audioPlayer.src) return alert("Selecciona un audio primero");
-        audioPlayer.play().then(() => { 
-            btnStop.style.display = "block";
-            btnStop.setAttribute('data-mensaje', "Prueba de sonido finalizada");
-        }).catch(() => alert("Interactúa con la página primero"));
+        if (!audioPlayer.src) {
+            alert("Primero selecciona un archivo de música");
+            return;
+        }
+        // Intentar reproducir
+        audioPlayer.play()
+            .then(() => {
+                btnStop.style.display = "block";
+                btnStop.setAttribute('data-mensaje', "Prueba de sonido terminada");
+            })
+            .catch(err => {
+                alert("Error: Toca cualquier parte de la pantalla primero para dar permiso al audio.");
+            });
     }
 
     function detenerAlarma() {
         audioPlayer.pause();
         audioPlayer.currentTime = 0;
         btnStop.style.display = "none";
-        const mensajeFinal = btnStop.getAttribute('data-mensaje') || "Alarma finalizada";
-        setTimeout(() => { alert(mensajeFinal); }, 100);
+        const msg = btnStop.getAttribute('data-mensaje') || "Alarma finalizada";
+        setTimeout(() => { alert(msg); }, 100);
     }
 
-    async function activarYGuardar() {
-        const permiso = await Notification.requestPermission();
-        if (permiso === 'granted') {
-            await activarWakeLock();
-            agregar();
-        } else {
-            alert("Es necesario aceptar notificaciones.");
+    async function guardarTodo() {
+        // Pedir permiso de notificaciones primero
+        if (Notification.permission !== 'granted') {
+            await Notification.requestPermission();
         }
-    }
+        
+        // Intentar activar WakeLock (opcional, no bloquea el guardado)
+        if ('wakeLock' in navigator) {
+            try { await navigator.wakeLock.request('screen'); } catch(e){}
+        }
 
-    function agregar() {
         const t = document.getElementById('tarea');
         const f = document.getElementById('fecha');
         const int = document.getElementById('intervaloRepeticion').value;
         const previo = document.getElementById('avisoPrevio').checked;
         
-        if(!t.value || !f.value) return alert("Completa los datos");
+        if(!t.value || !f.value) {
+            alert("Por favor rellena el nombre y la fecha");
+            return;
+        }
 
-        recordatorios.push({
+        const nuevaTarea = {
             texto: t.value,
             tiempo: new Date(f.value).getTime(),
             intervalo: parseInt(int),
@@ -118,11 +130,15 @@
             avisado: false,
             avisoPrevioActivo: previo,
             ultimoAvisoPrevio: 0
-        });
+        };
 
-        localStorage.setItem('pwa_notas_final', JSON.stringify(recordatorios));
+        recordatorios.push(nuevaTarea);
+        localStorage.setItem('pwa_notas_final_v4', JSON.stringify(recordatorios));
+        
+        // Limpiar campos y actualizar
         t.value = '';
         actualizarVista();
+        alert("✅ Tarea guardada correctamente");
     }
 
     function actualizarVista() {
@@ -133,7 +149,7 @@
                 <div>
                     <strong>${r.texto}</strong><br>
                     <small>${new Date(r.tiempo).toLocaleString()}</small>
-                    ${r.intervalo > 0 ? `<br><span class="badge">Cada ${r.intervalo} min</span>` : ''}
+                    ${r.intervalo > 0 ? `<br><span class="badge">Repite cada ${r.intervalo} min</span>` : ''}
                 </div>
                 <button style="background:#ff4757; width:auto; padding:8px" onclick="borrar(${r.id})">🗑️</button>
             </div>
@@ -142,26 +158,65 @@
 
     function borrar(id) {
         recordatorios = recordatorios.filter(r => r.id !== id);
-        localStorage.setItem('pwa_notas_final', JSON.stringify(recordatorios));
+        localStorage.setItem('pwa_notas_final_v4', JSON.stringify(recordatorios));
         actualizarVista();
     }
 
+    // RELOJ DEL SISTEMA (Cada 3 segundos)
     setInterval(() => {
         const ahora = Date.now();
+        let huboCambios = false;
+
         recordatorios.forEach(r => {
+            // Aviso 24h
             if (r.avisoPrevioActivo && ahora >= (r.tiempo - 86400000) && ahora < r.tiempo) {
                 if (ahora - r.ultimoAvisoPrevio >= 3600000) {
-                    lanzarAviso(r.texto, "Aviso preventivo", false);
+                    lanzarAlarma(r.texto, "Aviso preventivo", false);
                     r.ultimoAvisoPrevio = ahora;
-                    localStorage.setItem('pwa_notas_final', JSON.stringify(recordatorios));
+                    huboCambios = true;
                 }
             }
 
+            // Alarma principal
             if (ahora >= r.tiempo && !r.avisado) {
                 if (r.intervalo > 0) {
                     r.tiempo = ahora + (r.intervalo * 60000);
                 } else {
                     r.avisado = true;
                 }
-                localStorage.setItem('pwa_notas_final', JSON.stringify(recordatorios));
-                lanzarAviso(r
+                huboCambios = true;
+                lanzarAlarma(r.texto, "¡ES HORA!", true);
+                actualizarVista();
+            }
+        });
+
+        if (huboCambios) {
+            localStorage.setItem('pwa_notas_final_v4', JSON.stringify(recordatorios));
+        }
+    }, 3000);
+
+    function lanzarAlarma(tarea, titulo, sonar) {
+        if (Notification.permission === 'granted') {
+            navigator.serviceWorker.ready.then(reg => {
+                reg.showNotification(titulo, {
+                    body: tarea,
+                    vibrate: [500, 200, 500],
+                    tag: 'alarma-notif'
+                });
+            });
+        }
+        
+        if (sonar) {
+            btnStop.setAttribute('data-mensaje', "Tarea: " + tarea);
+            audioPlayer.play().then(() => {
+                btnStop.style.display = "block";
+            }).catch(() => {
+                btnStop.style.display = "block"; // Mostrar botón aunque falle el autoplay
+            });
+        }
+    }
+
+    actualizarVista();
+</script>
+</body>
+</html>
