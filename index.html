@@ -1,68 +1,148 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Alarma Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alarma Cloud Completa</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; }
+        button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .btn-delete { background: #ff4757; width: auto; padding: 5px 10px; margin: 0; }
+        .btn-stop { background: #ff4757; display: none; padding: 20px; margin-top: 15px; animation: pulse 1s infinite; }
+        .item { background: #fff; margin-top: 10px; padding: 15px; border-radius: 12px; width: 100%; max-width: 400px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        .audio-section { background: #e8f0fe; padding: 10px; border-radius: 10px; margin-bottom: 10px; }
+    </style>
 </head>
-<body style="font-family:sans-serif; text-align:center; background:#f0f2f5;">
+<body>
 
-    <div style="background:white; padding:20px; border-radius:15px; display:inline-block; margin-top:50px; box-shadow:0 5px 15px rgba(0,0,0,0.1);">
-        <h2>⏰ Mi Alarma Cloud</h2>
-        <input type="text" id="tarea" placeholder="¿Qué recordar?" style="padding:10px; width:80%;"><br><br>
-        <input type="datetime-local" id="fecha" style="padding:10px; width:80%;"><br><br>
-        <button onclick="guardar()" style="padding:10px 20px; background:#1a73e8; color:white; border:none; border-radius:5px; cursor:pointer;">💾 GUARDAR ALARMA</button>
+<div class="card">
+    <h2>⏰ Alarma Pro</h2>
+    
+    <div class="audio-section">
+        <label style="font-size: 12px;">🎵 Selecciona tu sonido:</label>
+        <input type="file" id="audioFile" accept="audio/*">
+        <button style="background:#34a853" onclick="probarSonido()">🔈 Probar Sonido</button>
     </div>
 
-    <div id="lista" style="margin-top:20px;"></div>
+    <input type="text" id="tarea" placeholder="¿Qué recordar?">
+    <input type="datetime-local" id="fecha">
+    
+    <button onclick="guardar()">💾 GUARDAR EN LA NUBE</button>
+    <button id="btnStop" class="btn-stop" onclick="detenerAlarma()">🔕 DETENER SONIDO</button>
+</div>
 
-    <script>
-        // TU CONFIGURACIÓN REAL
-        const firebaseConfig = {
-            apiKey: "AIzaSyDhv7MyudfyxIUf2OXuy4Gnn8mdNFW_xIU",
-            authDomain: "mialarmapro.firebaseapp.com",
-            databaseURL: "https://mialarmapro-default-rtdb.firebaseio.com",
-            projectId: "mialarmapro",
-            storageBucket: "mialarmapro.firebasestorage.app",
-            messagingSenderId: "978466433092",
-            appId: "1:978466433092:web:11903d2bf289294a7c3411"
-        };
+<div id="lista" style="width: 100%; max-width: 400px; margin-top: 20px;"></div>
 
-        // Inicializar
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+<audio id="alarmaAudio" loop playsinline></audio>
 
-        function guardar() {
-            const t = document.getElementById('tarea').value;
-            const f = document.getElementById('fecha').value;
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyDhv7MyudfyxIUf2OXuy4Gnn8mdNFW_xIU",
+        authDomain: "mialarmapro.firebaseapp.com",
+        databaseURL: "https://mialarmapro-default-rtdb.firebaseio.com", 
+        projectId: "mialarmapro",
+        storageBucket: "mialarmapro.firebasestorage.app",
+        messagingSenderId: "978466433092",
+        appId: "1:978466433092:web:11903d2bf289294a7c3411"
+    };
 
-            if(!t || !f) return alert("Escribe algo y pon fecha");
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const audioPlayer = document.getElementById('alarmaAudio');
+    const btnStop = document.getElementById('btnStop');
 
-            // Esto es lo que escribe en Firebase
-            db.ref('alarmas').push({
-                texto: t,
-                tiempo: new Date(f).getTime(),
-                avisado: false
-            })
-            .then(() => {
-                alert("✅ ¡ENVIADO A FIREBASE!");
-                document.getElementById('tarea').value = "";
-            })
-            .catch((error) => {
-                alert("❌ ERROR: " + error.message);
-            });
+    // Cargar audio seleccionado
+    document.getElementById('audioFile').onchange = (e) => {
+        if (e.target.files[0]) {
+            audioPlayer.src = URL.createObjectURL(e.target.files[0]);
         }
+    };
 
-        // Mostrar lo que hay en la base de datos
-        db.ref('alarmas').on('value', (snapshot) => {
-            const data = snapshot.val();
-            const listaDiv = document.getElementById('lista');
-            listaDiv.innerHTML = "<h3>Tareas en la Nube:</h3>";
-            for(let id in data) {
-                listaDiv.innerHTML += `<p>${data[id].texto} - ${new Date(data[id].tiempo).toLocaleString()}</p>`;
-            }
+    function probarSonido() {
+        if (!audioPlayer.src) return alert("Por favor, selecciona un archivo de audio primero.");
+        audioPlayer.play();
+        btnStop.style.display = "block";
+    }
+
+    function detenerAlarma() {
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0;
+        btnStop.style.display = "none";
+    }
+
+    function guardar() {
+        const t = document.getElementById('tarea').value;
+        const f = document.getElementById('fecha').value;
+
+        if(!t || !f) return alert("Escribe la tarea y selecciona fecha/hora");
+
+        db.ref('alarmas').push({
+            texto: t,
+            tiempo: new Date(f).getTime(),
+            avisado: false
+        }).then(() => {
+            alert("✅ Alarma guardada");
+            document.getElementById('tarea').value = "";
         });
-    </script>
+    }
+
+    // Escuchar la base de datos y mostrar lista con botón de borrar
+    db.ref('alarmas').on('value', (snapshot) => {
+        const listaDiv = document.getElementById('lista');
+        listaDiv.innerHTML = "<h3>Mis Alarmas:</h3>";
+        const datos = snapshot.val();
+        const ahora = Date.now();
+
+        if (datos) {
+            for (let id in datos) {
+                const r = datos[id];
+                const fechaLegible = new Date(r.tiempo).toLocaleString();
+
+                listaDiv.innerHTML += `
+                    <div class="item">
+                        <div>
+                            <strong>${r.texto}</strong><br>
+                            <small>${fechaLegible}</small>
+                        </div>
+                        <button class="btn-delete" onclick="eliminar('${id}')">🗑️</button>
+                    </div>
+                `;
+
+                // Lógica para que suene si llega la hora
+                if (ahora >= r.tiempo && !r.avisado) {
+                    dispararAlarma(id, r.texto);
+                }
+            }
+        } else {
+            listaDiv.innerHTML += "<p>No hay alarmas programadas.</p>";
+        }
+    });
+
+    function dispararAlarma(id, texto) {
+        // Marcar como avisado para que no suene infinitamente
+        db.ref('alarmas/' + id).update({ avisado: true });
+        
+        audioPlayer.play();
+        btnStop.style.display = "block";
+        
+        if (Notification.permission === 'granted') {
+            new Notification("⏰ ¡ES HORA!", { body: texto });
+        }
+    }
+
+    // FUNCIÓN PARA BORRAR
+    function eliminar(id) {
+        if(confirm("¿Seguro que quieres borrar esta alarma?")) {
+            db.ref('alarmas/' + id).remove();
+        }
+    }
+
+    Notification.requestPermission();
+</script>
 </body>
 </html>
