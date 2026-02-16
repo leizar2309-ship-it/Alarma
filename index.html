@@ -1,148 +1,68 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alarma Pro Cloud</title>
-    <style>
-        body { font-family: sans-serif; background: #f0f2f5; padding: 15px; display: flex; flex-direction: column; align-items: center; }
-        .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        h2 { color: #1a73e8; text-align: center; }
-        label { display: block; margin-top: 15px; font-weight: bold; font-size: 0.85rem; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; }
-        button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
-        .config-sonido { background: #e8f0fe; padding: 15px; border-radius: 12px; border: 1px dashed #1a73e8; text-align: center; }
-        .btn-stop { background: #ff4757; display: none; padding: 20px; animation: pulse 1s infinite; margin-top: 15px; }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
-        .item { background: #fff; margin-top: 10px; padding: 15px; border-radius: 12px; width: 100%; max-width: 400px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    </style>
+    <title>Alarma Pro</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
-<body>
+<body style="font-family:sans-serif; text-align:center; background:#f0f2f5;">
 
-<div class="card">
-    <h2>⏰ Alarma Cloud Pro</h2>
-    
-    <div class="config-sonido">
-        <label>🎵 Sonido de Alarma:</label>
-        <input type="file" id="audioFile" accept="audio/*">
-        <button style="background:#34a853" onclick="window.probarSonido()">🔈 Probar Sonido</button>
+    <div style="background:white; padding:20px; border-radius:15px; display:inline-block; margin-top:50px; box-shadow:0 5px 15px rgba(0,0,0,0.1);">
+        <h2>⏰ Mi Alarma Cloud</h2>
+        <input type="text" id="tarea" placeholder="¿Qué recordar?" style="padding:10px; width:80%;"><br><br>
+        <input type="datetime-local" id="fecha" style="padding:10px; width:80%;"><br><br>
+        <button onclick="guardar()" style="padding:10px 20px; background:#1a73e8; color:white; border:none; border-radius:5px; cursor:pointer;">💾 GUARDAR ALARMA</button>
     </div>
 
-    <input type="text" id="tarea" placeholder="¿Qué recordar?">
-    <input type="datetime-local" id="fecha">
+    <div id="lista" style="margin-top:20px;"></div>
 
-    <label>Repetir cada:</label>
-    <select id="intervalo">
-        <option value="0">No repetir</option>
-        <option value="1">1 minuto</option>
-        <option value="5">5 minutos</option>
-        <option value="10">10 minutos</option>
-    </select>
+    <script>
+        // TU CONFIGURACIÓN REAL
+        const firebaseConfig = {
+            apiKey: "AIzaSyDhv7MyudfyxIUf2OXuy4Gnn8mdNFW_xIU",
+            authDomain: "mialarmapro.firebaseapp.com",
+            databaseURL: "https://mialarmapro-default-rtdb.firebaseio.com",
+            projectId: "mialarmapro",
+            storageBucket: "mialarmapro.firebasestorage.app",
+            messagingSenderId: "978466433092",
+            appId: "1:978466433092:web:11903d2bf289294a7c3411"
+        };
 
-    <button id="btnGuardar">💾 Guardar en Firebase</button>
-    <button id="btnStop" class="btn-stop" onclick="window.detenerAlarma()">🔕 DETENER SONIDO</button>
-</div>
+        // Inicializar
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-<div id="lista"></div>
-<audio id="alarmaAudio" loop playsinline></audio>
+        function guardar() {
+            const t = document.getElementById('tarea').value;
+            const f = document.getElementById('fecha').value;
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+            if(!t || !f) return alert("Escribe algo y pon fecha");
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyDhv7MyudfyxIUf2OXuy4Gnn8mdNFW_xIU",
-        authDomain: "mialarmapro.firebaseapp.com",
-        projectId: "mialarmapro",
-        storageBucket: "mialarmapro.firebasestorage.app",
-        messagingSenderId: "978466433092",
-        appId: "1:978466433092:web:11903d2bf289294a7c3411"
-    };
+            // Esto es lo que escribe en Firebase
+            db.ref('alarmas').push({
+                texto: t,
+                tiempo: new Date(f).getTime(),
+                avisado: false
+            })
+            .then(() => {
+                alert("✅ ¡ENVIADO A FIREBASE!");
+                document.getElementById('tarea').value = "";
+            })
+            .catch((error) => {
+                alert("❌ ERROR: " + error.message);
+            });
+        }
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const audioPlayer = document.getElementById('alarmaAudio');
-    const btnStop = document.getElementById('btnStop');
-
-    // Funciones globales para que los botones HTML funcionen
-    window.probarSonido = () => {
-        if (!audioPlayer.src) return alert("Selecciona un audio");
-        audioPlayer.play();
-        btnStop.style.display = "block";
-    };
-
-    window.detenerAlarma = () => {
-        audioPlayer.pause();
-        audioPlayer.currentTime = 0;
-        btnStop.style.display = "none";
-    };
-
-    // Guardar en Firebase
-    document.getElementById('btnGuardar').onclick = async () => {
-        const t = document.getElementById('tarea').value;
-        const f = document.getElementById('fecha').value;
-        const i = document.getElementById('intervalo').value;
-
-        if(!t || !f) return alert("Completa los campos");
-
-        await addDoc(collection(db, "alarmas"), {
-            texto: t,
-            tiempo: new Date(f).getTime(),
-            intervalo: parseInt(i),
-            avisado: false
-        });
-        alert("Sincronizado con la nube ✅");
-        document.getElementById('tarea').value = "";
-    };
-
-    // Escuchar cambios en tiempo real
-    const q = query(collection(db, "alarmas"), orderBy("tiempo", "asc"));
-    onSnapshot(q, (snapshot) => {
-        const listaDiv = document.getElementById('lista');
-        listaDiv.innerHTML = "";
-        const ahora = Date.now();
-
-        snapshot.forEach((docSnap) => {
-            const r = docSnap.data();
-            const id = docSnap.id;
-
-            listaDiv.innerHTML += `
-                <div class="item">
-                    <div><strong>${r.texto}</strong><br><small>${new Date(r.tiempo).toLocaleString()}</small></div>
-                    <button onclick="window.eliminarTarea('${id}')" style="background:red; width:auto; padding:5px">🗑️</button>
-                </div>
-            `;
-
-            // Lógica de disparo
-            if (ahora >= r.tiempo && !r.avisado) {
-                dispararAlarma(id, r.texto, r.intervalo);
+        // Mostrar lo que hay en la base de datos
+        db.ref('alarmas').on('value', (snapshot) => {
+            const data = snapshot.val();
+            const listaDiv = document.getElementById('lista');
+            listaDiv.innerHTML = "<h3>Tareas en la Nube:</h3>";
+            for(let id in data) {
+                listaDiv.innerHTML += `<p>${data[id].texto} - ${new Date(data[id].tiempo).toLocaleString()}</p>`;
             }
         });
-    });
-
-    async function dispararAlarma(id, texto, int) {
-        const docRef = doc(db, "alarmas", id);
-        if (int > 0) {
-            await updateDoc(docRef, { tiempo: Date.now() + (int * 60000) });
-        } else {
-            await updateDoc(docRef, { avisado: true });
-        }
-        
-        audioPlayer.play();
-        btnStop.style.display = "block";
-        btnStop.setAttribute('data-msg', texto);
-        if(Notification.permission === 'granted') new Notification("⏰ ¡ALERTA!", { body: texto });
-    }
-
-    window.eliminarTarea = async (id) => {
-        await deleteDoc(doc(db, "alarmas", id));
-    };
-
-    document.getElementById('audioFile').onchange = (e) => {
-        if (e.target.files[0]) audioPlayer.src = URL.createObjectURL(e.target.files[0]);
-    };
-
-    Notification.requestPermission();
-</script>
+    </script>
 </body>
 </html>
