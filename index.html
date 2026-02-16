@@ -2,221 +2,147 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#1a73e8">
-    <link rel="manifest" href="manifest.json">
-    <title>Alarma Pro Definitiva</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alarma Pro Cloud</title>
     <style>
         body { font-family: sans-serif; background: #f0f2f5; padding: 15px; display: flex; flex-direction: column; align-items: center; }
         .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        h2 { color: #1a73e8; text-align: center; margin-bottom: 15px; }
-        label { display: block; margin-top: 15px; font-weight: bold; font-size: 0.85rem; color: #444; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; font-size: 1rem; }
+        h2 { color: #1a73e8; text-align: center; }
+        label { display: block; margin-top: 15px; font-weight: bold; font-size: 0.85rem; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; }
         button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
-        .config-sonido { background: #e8f0fe; padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px dashed #1a73e8; text-align: center; }
-        .btn-test { background: #34a853; }
-        .btn-stop { background: #ff4757; display: none; padding: 25px; font-size: 1.3rem; animation: pulse 1s infinite; margin-top: 20px; }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(255, 71, 87, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0); } }
+        .config-sonido { background: #e8f0fe; padding: 15px; border-radius: 12px; border: 1px dashed #1a73e8; text-align: center; }
+        .btn-stop { background: #ff4757; display: none; padding: 20px; animation: pulse 1s infinite; margin-top: 15px; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.02); } 100% { transform: scale(1); } }
         .item { background: #fff; margin-top: 10px; padding: 15px; border-radius: 12px; width: 100%; max-width: 400px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .badge { background: #1a73e8; color: white; padding: 2px 7px; border-radius: 5px; font-size: 0.7rem; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>⏰ Alarma Pro</h2>
+    <h2>⏰ Alarma Cloud Pro</h2>
     
     <div class="config-sonido">
         <label>🎵 Sonido de Alarma:</label>
         <input type="file" id="audioFile" accept="audio/*">
-        <button class="btn-test" id="btnPrueba" onclick="probarSonido()">🔈 Probar Sonido</button>
+        <button style="background:#34a853" onclick="window.probarSonido()">🔈 Probar Sonido</button>
     </div>
 
-    <input type="text" id="tarea" placeholder="¿Qué hay que hacer?">
+    <input type="text" id="tarea" placeholder="¿Qué recordar?">
     <input type="datetime-local" id="fecha">
 
     <label>Repetir cada:</label>
-    <select id="intervaloRepeticion">
+    <select id="intervalo">
         <option value="0">No repetir</option>
         <option value="1">1 minuto</option>
         <option value="5">5 minutos</option>
         <option value="10">10 minutos</option>
-        <option value="30">30 minutos</option>
-        <option value="60">1 hora</option>
     </select>
 
-    <label><input type="checkbox" id="avisoPrevio" style="width:auto"> Aviso 24h (cada hora)</label>
-    
-    <button onclick="guardarTodo()">💾 Guardar Recordatorio</button>
-
-    <button id="btnStop" class="btn-stop" onclick="detenerAlarma()">🔕 DETENER SONIDO</button>
+    <button id="btnGuardar">💾 Guardar en Firebase</button>
+    <button id="btnStop" class="btn-stop" onclick="window.detenerAlarma()">🔕 DETENER SONIDO</button>
 </div>
 
 <div id="lista"></div>
-
 <audio id="alarmaAudio" loop playsinline></audio>
 
-<script>
-    // Registrar el Service Worker inmediatamente
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').catch(err => console.log("SW error", err));
-    }
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    let recordatorios = JSON.parse(localStorage.getItem('pwa_notas_final_v4')) || [];
+    const firebaseConfig = {
+        apiKey: "AIzaSyDhv7MyudfyxIUf2OXuy4Gnn8mdNFW_xIU",
+        authDomain: "mialarmapro.firebaseapp.com",
+        projectId: "mialarmapro",
+        storageBucket: "mialarmapro.firebasestorage.app",
+        messagingSenderId: "978466433092",
+        appId: "1:978466433092:web:11903d2bf289294a7c3411"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
     const audioPlayer = document.getElementById('alarmaAudio');
     const btnStop = document.getElementById('btnStop');
 
-    // Cargar audio al seleccionar archivo
-    document.getElementById('audioFile').onchange = function() {
-        const file = this.files[0];
-        if (file) {
-            const url = URL.createObjectURL(file);
-            audioPlayer.src = url;
-            audioPlayer.load();
-            console.log("Audio cargado correctamente");
-        }
+    // Funciones globales para que los botones HTML funcionen
+    window.probarSonido = () => {
+        if (!audioPlayer.src) return alert("Selecciona un audio");
+        audioPlayer.play();
+        btnStop.style.display = "block";
     };
 
-    function probarSonido() {
-        if (!audioPlayer.src) {
-            alert("Primero selecciona un archivo de música");
-            return;
-        }
-        // Intentar reproducir
-        audioPlayer.play()
-            .then(() => {
-                btnStop.style.display = "block";
-                btnStop.setAttribute('data-mensaje', "Prueba de sonido terminada");
-            })
-            .catch(err => {
-                alert("Error: Toca cualquier parte de la pantalla primero para dar permiso al audio.");
-            });
-    }
-
-    function detenerAlarma() {
+    window.detenerAlarma = () => {
         audioPlayer.pause();
         audioPlayer.currentTime = 0;
         btnStop.style.display = "none";
-        const msg = btnStop.getAttribute('data-mensaje') || "Alarma finalizada";
-        setTimeout(() => { alert(msg); }, 100);
-    }
+    };
 
-    async function guardarTodo() {
-        // Pedir permiso de notificaciones primero
-        if (Notification.permission !== 'granted') {
-            await Notification.requestPermission();
-        }
-        
-        // Intentar activar WakeLock (opcional, no bloquea el guardado)
-        if ('wakeLock' in navigator) {
-            try { await navigator.wakeLock.request('screen'); } catch(e){}
-        }
+    // Guardar en Firebase
+    document.getElementById('btnGuardar').onclick = async () => {
+        const t = document.getElementById('tarea').value;
+        const f = document.getElementById('fecha').value;
+        const i = document.getElementById('intervalo').value;
 
-        const t = document.getElementById('tarea');
-        const f = document.getElementById('fecha');
-        const int = document.getElementById('intervaloRepeticion').value;
-        const previo = document.getElementById('avisoPrevio').checked;
-        
-        if(!t.value || !f.value) {
-            alert("Por favor rellena el nombre y la fecha");
-            return;
-        }
+        if(!t || !f) return alert("Completa los campos");
 
-        const nuevaTarea = {
-            texto: t.value,
-            tiempo: new Date(f.value).getTime(),
-            intervalo: parseInt(int),
-            id: Date.now(),
-            avisado: false,
-            avisoPrevioActivo: previo,
-            ultimoAvisoPrevio: 0
-        };
+        await addDoc(collection(db, "alarmas"), {
+            texto: t,
+            tiempo: new Date(f).getTime(),
+            intervalo: parseInt(i),
+            avisado: false
+        });
+        alert("Sincronizado con la nube ✅");
+        document.getElementById('tarea').value = "";
+    };
 
-        recordatorios.push(nuevaTarea);
-        localStorage.setItem('pwa_notas_final_v4', JSON.stringify(recordatorios));
-        
-        // Limpiar campos y actualizar
-        t.value = '';
-        actualizarVista();
-        alert("✅ Tarea guardada correctamente");
-    }
-
-    function actualizarVista() {
-        const listado = document.getElementById('lista');
-        recordatorios.sort((a, b) => a.tiempo - b.tiempo);
-        listado.innerHTML = recordatorios.map(r => `
-            <div class="item">
-                <div>
-                    <strong>${r.texto}</strong><br>
-                    <small>${new Date(r.tiempo).toLocaleString()}</small>
-                    ${r.intervalo > 0 ? `<br><span class="badge">Repite cada ${r.intervalo} min</span>` : ''}
-                </div>
-                <button style="background:#ff4757; width:auto; padding:8px" onclick="borrar(${r.id})">🗑️</button>
-            </div>
-        `).join('');
-    }
-
-    function borrar(id) {
-        recordatorios = recordatorios.filter(r => r.id !== id);
-        localStorage.setItem('pwa_notas_final_v4', JSON.stringify(recordatorios));
-        actualizarVista();
-    }
-
-    // RELOJ DEL SISTEMA (Cada 3 segundos)
-    setInterval(() => {
+    // Escuchar cambios en tiempo real
+    const q = query(collection(db, "alarmas"), orderBy("tiempo", "asc"));
+    onSnapshot(q, (snapshot) => {
+        const listaDiv = document.getElementById('lista');
+        listaDiv.innerHTML = "";
         const ahora = Date.now();
-        let huboCambios = false;
 
-        recordatorios.forEach(r => {
-            // Aviso 24h
-            if (r.avisoPrevioActivo && ahora >= (r.tiempo - 86400000) && ahora < r.tiempo) {
-                if (ahora - r.ultimoAvisoPrevio >= 3600000) {
-                    lanzarAlarma(r.texto, "Aviso preventivo", false);
-                    r.ultimoAvisoPrevio = ahora;
-                    huboCambios = true;
-                }
-            }
+        snapshot.forEach((docSnap) => {
+            const r = docSnap.data();
+            const id = docSnap.id;
 
-            // Alarma principal
+            listaDiv.innerHTML += `
+                <div class="item">
+                    <div><strong>${r.texto}</strong><br><small>${new Date(r.tiempo).toLocaleString()}</small></div>
+                    <button onclick="window.eliminarTarea('${id}')" style="background:red; width:auto; padding:5px">🗑️</button>
+                </div>
+            `;
+
+            // Lógica de disparo
             if (ahora >= r.tiempo && !r.avisado) {
-                if (r.intervalo > 0) {
-                    r.tiempo = ahora + (r.intervalo * 60000);
-                } else {
-                    r.avisado = true;
-                }
-                huboCambios = true;
-                lanzarAlarma(r.texto, "¡ES HORA!", true);
-                actualizarVista();
+                dispararAlarma(id, r.texto, r.intervalo);
             }
         });
+    });
 
-        if (huboCambios) {
-            localStorage.setItem('pwa_notas_final_v4', JSON.stringify(recordatorios));
-        }
-    }, 3000);
-
-    function lanzarAlarma(tarea, titulo, sonar) {
-        if (Notification.permission === 'granted') {
-            navigator.serviceWorker.ready.then(reg => {
-                reg.showNotification(titulo, {
-                    body: tarea,
-                    vibrate: [500, 200, 500],
-                    tag: 'alarma-notif'
-                });
-            });
+    async function dispararAlarma(id, texto, int) {
+        const docRef = doc(db, "alarmas", id);
+        if (int > 0) {
+            await updateDoc(docRef, { tiempo: Date.now() + (int * 60000) });
+        } else {
+            await updateDoc(docRef, { avisado: true });
         }
         
-        if (sonar) {
-            btnStop.setAttribute('data-mensaje', "Tarea: " + tarea);
-            audioPlayer.play().then(() => {
-                btnStop.style.display = "block";
-            }).catch(() => {
-                btnStop.style.display = "block"; // Mostrar botón aunque falle el autoplay
-            });
-        }
+        audioPlayer.play();
+        btnStop.style.display = "block";
+        btnStop.setAttribute('data-msg', texto);
+        if(Notification.permission === 'granted') new Notification("⏰ ¡ALERTA!", { body: texto });
     }
 
-    actualizarVista();
+    window.eliminarTarea = async (id) => {
+        await deleteDoc(doc(db, "alarmas", id));
+    };
+
+    document.getElementById('audioFile').onchange = (e) => {
+        if (e.target.files[0]) audioPlayer.src = URL.createObjectURL(e.target.files[0]);
+    };
+
+    Notification.requestPermission();
 </script>
 </body>
 </html>
