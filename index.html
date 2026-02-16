@@ -56,7 +56,16 @@
     const audioPlayer = document.getElementById('alarmaAudio');
     const btnStop = document.getElementById('btnStop');
 
-    // Cargar audio seleccionado
+    // --- TRUCO PARA DESBLOQUEAR EL AUDIO ---
+    // El navegador necesita que toques la pantalla una vez para dejar sonar cosas
+    document.body.addEventListener('click', function() {
+        audioPlayer.play().then(() => {
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+            console.log("Audio listo");
+        }).catch(e => console.log("Permiso pendiente"));
+    }, { once: true });
+
     document.getElementById('audioFile').onchange = (e) => {
         if (e.target.files[0]) {
             audioPlayer.src = URL.createObjectURL(e.target.files[0]);
@@ -64,7 +73,7 @@
     };
 
     function probarSonido() {
-        if (!audioPlayer.src) return alert("Por favor, selecciona un archivo de audio primero.");
+        if (!audioPlayer.src) return alert("Selecciona un archivo de audio");
         audioPlayer.play();
         btnStop.style.display = "block";
     }
@@ -78,20 +87,18 @@
     function guardar() {
         const t = document.getElementById('tarea').value;
         const f = document.getElementById('fecha').value;
-
-        if(!t || !f) return alert("Escribe la tarea y selecciona fecha/hora");
+        if(!t || !f) return alert("Faltan datos");
 
         db.ref('alarmas').push({
             texto: t,
             tiempo: new Date(f).getTime(),
             avisado: false
         }).then(() => {
-            alert("✅ Alarma guardada");
+            alert("✅ Guardada");
             document.getElementById('tarea').value = "";
         });
     }
 
-    // Escuchar la base de datos y mostrar lista con botón de borrar
     db.ref('alarmas').on('value', (snapshot) => {
         const listaDiv = document.getElementById('lista');
         listaDiv.innerHTML = "<h3>Mis Alarmas:</h3>";
@@ -101,45 +108,39 @@
         if (datos) {
             for (let id in datos) {
                 const r = datos[id];
-                const fechaLegible = new Date(r.tiempo).toLocaleString();
-
                 listaDiv.innerHTML += `
                     <div class="item">
-                        <div>
-                            <strong>${r.texto}</strong><br>
-                            <small>${fechaLegible}</small>
-                        </div>
+                        <div><strong>${r.texto}</strong><br><small>${new Date(r.tiempo).toLocaleString()}</small></div>
                         <button class="btn-delete" onclick="eliminar('${id}')">🗑️</button>
                     </div>
                 `;
 
-                // Lógica para que suene si llega la hora
+                // Si ya es la hora y no se ha avisado
                 if (ahora >= r.tiempo && !r.avisado) {
                     dispararAlarma(id, r.texto);
                 }
             }
-        } else {
-            listaDiv.innerHTML += "<p>No hay alarmas programadas.</p>";
         }
     });
 
     function dispararAlarma(id, texto) {
-        // Marcar como avisado para que no suene infinitamente
         db.ref('alarmas/' + id).update({ avisado: true });
         
-        audioPlayer.play();
+        // Intentar sonar
+        audioPlayer.play().catch(e => {
+            console.log("Bloqueo de audio, mostrando alerta");
+            alert("⏰ ALARMA: " + texto);
+        });
+
         btnStop.style.display = "block";
         
         if (Notification.permission === 'granted') {
-            new Notification("⏰ ¡ES HORA!", { body: texto });
+            new Notification("⏰ ¡ES HORA!", { body: texto, requireInteraction: true });
         }
     }
 
-    // FUNCIÓN PARA BORRAR
     function eliminar(id) {
-        if(confirm("¿Seguro que quieres borrar esta alarma?")) {
-            db.ref('alarmas/' + id).remove();
-        }
+        if(confirm("¿Borrar?")) db.ref('alarmas/' + id).remove();
     }
 
     Notification.requestPermission();
