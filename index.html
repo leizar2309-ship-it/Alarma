@@ -3,41 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alarma Cloud Completa</title>
+    <title>Alarma Cloud con Notificación</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; padding: 15px; display: flex; flex-direction: column; align-items: center; }
-        .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; }
-        button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; }
-        .btn-delete { background: #ff4757; width: auto; padding: 5px 10px; margin: 0; }
-        .btn-stop { background: #ff4757; display: none; padding: 20px; margin-top: 15px; animation: pulse 1s infinite; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        .card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; z-index: 1; }
+        input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; }
+        button { background: #1a73e8; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:active { transform: scale(0.98); }
         .item { background: #fff; margin-top: 10px; padding: 15px; border-radius: 12px; width: 100%; max-width: 400px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-        .audio-section { background: #e8f0fe; padding: 10px; border-radius: 10px; margin-bottom: 10px; }
+        .btn-delete { background: #ff4757; width: auto; padding: 5px 10px; }
+
+        /* --- VENTANA DE NOTIFICACIÓN (MODAL) --- */
+        #modalAlarma {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 25px;
+            width: 80%;
+            max-width: 350px;
+            animation: bounceIn 0.5s;
+        }
+        .modal-content h1 { color: #ff4757; font-size: 2rem; margin-bottom: 10px; }
+        .modal-content p { font-size: 1.2rem; color: #333; font-weight: bold; margin-bottom: 20px; }
+        .btn-stop-modal { background: #ff4757; font-size: 1.2rem; padding: 15px; }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            50% { transform: scale(1.05); opacity: 1; }
+            70% { transform: scale(0.9); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>⏰ Alarma Pro</h2>
+    <h2>⏰ Alarma Pro Cloud</h2>
     
-    <div class="audio-section">
-        <label style="font-size: 12px;">🎵 Selecciona tu sonido:</label>
+    <div style="background: #e8f0fe; padding: 10px; border-radius: 10px;">
+        <label style="font-size: 11px;">🎵 Sonido:</label>
         <input type="file" id="audioFile" accept="audio/*">
-        <button style="background:#34a853" onclick="probarSonido()">🔈 Probar Sonido</button>
     </div>
 
-    <input type="text" id="tarea" placeholder="¿Qué recordar?">
+    <input type="text" id="tarea" placeholder="¿Qué nombre tiene la alarma?">
     <input type="datetime-local" id="fecha">
     
-    <button onclick="guardar()">💾 GUARDAR EN LA NUBE</button>
-    <button id="btnStop" class="btn-stop" onclick="detenerAlarma()">🔕 DETENER SONIDO</button>
+    <button onclick="guardar()">💾 GUARDAR ALARMA</button>
+</div>
+
+<div id="modalAlarma">
+    <div class="modal-content">
+        <h1>⏰ ¡ALERTA!</h1>
+        <p id="nombreAlarmaTxt">Nombre de la tarea</p>
+        <button class="btn-stop-modal" onclick="detenerAlarma()">DETENER SONIDO</button>
+    </div>
 </div>
 
 <div id="lista" style="width: 100%; max-width: 400px; margin-top: 20px;"></div>
-
 <audio id="alarmaAudio" loop playsinline></audio>
 
 <script>
@@ -54,54 +87,42 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     const audioPlayer = document.getElementById('alarmaAudio');
-    const btnStop = document.getElementById('btnStop');
+    const modal = document.getElementById('modalAlarma');
+    const nombreTxt = document.getElementById('nombreAlarmaTxt');
 
-    // --- TRUCO PARA DESBLOQUEAR EL AUDIO ---
-    // El navegador necesita que toques la pantalla una vez para dejar sonar cosas
-    document.body.addEventListener('click', function() {
-        audioPlayer.play().then(() => {
-            audioPlayer.pause();
-            audioPlayer.currentTime = 0;
-            console.log("Audio listo");
-        }).catch(e => console.log("Permiso pendiente"));
+    // Desbloquear audio al primer toque
+    document.body.addEventListener('click', () => {
+        audioPlayer.play().then(() => { audioPlayer.pause(); audioPlayer.currentTime = 0; });
     }, { once: true });
 
     document.getElementById('audioFile').onchange = (e) => {
-        if (e.target.files[0]) {
-            audioPlayer.src = URL.createObjectURL(e.target.files[0]);
-        }
+        if (e.target.files[0]) audioPlayer.src = URL.createObjectURL(e.target.files[0]);
     };
-
-    function probarSonido() {
-        if (!audioPlayer.src) return alert("Selecciona un archivo de audio");
-        audioPlayer.play();
-        btnStop.style.display = "block";
-    }
 
     function detenerAlarma() {
         audioPlayer.pause();
         audioPlayer.currentTime = 0;
-        btnStop.style.display = "none";
+        modal.style.display = "none"; // Ocultar ventana
     }
 
     function guardar() {
         const t = document.getElementById('tarea').value;
         const f = document.getElementById('fecha').value;
-        if(!t || !f) return alert("Faltan datos");
+        if(!t || !f) return alert("Completa los datos");
 
         db.ref('alarmas').push({
             texto: t,
             tiempo: new Date(f).getTime(),
             avisado: false
         }).then(() => {
-            alert("✅ Guardada");
+            alert("✅ Guardada en la nube");
             document.getElementById('tarea').value = "";
         });
     }
 
     db.ref('alarmas').on('value', (snapshot) => {
         const listaDiv = document.getElementById('lista');
-        listaDiv.innerHTML = "<h3>Mis Alarmas:</h3>";
+        listaDiv.innerHTML = "<h3>Próximas Alarmas:</h3>";
         const datos = snapshot.val();
         const ahora = Date.now();
 
@@ -114,8 +135,6 @@
                         <button class="btn-delete" onclick="eliminar('${id}')">🗑️</button>
                     </div>
                 `;
-
-                // Si ya es la hora y no se ha avisado
                 if (ahora >= r.tiempo && !r.avisado) {
                     dispararAlarma(id, r.texto);
                 }
@@ -126,21 +145,19 @@
     function dispararAlarma(id, texto) {
         db.ref('alarmas/' + id).update({ avisado: true });
         
-        // Intentar sonar
-        audioPlayer.play().catch(e => {
-            console.log("Bloqueo de audio, mostrando alerta");
-            alert("⏰ ALARMA: " + texto);
-        });
-
-        btnStop.style.display = "block";
+        // Configurar y mostrar ventana
+        nombreTxt.innerText = texto;
+        modal.style.display = "flex";
+        
+        audioPlayer.play().catch(() => alert("⏰ ¡HORA DE: " + texto + "!"));
         
         if (Notification.permission === 'granted') {
-            new Notification("⏰ ¡ES HORA!", { body: texto, requireInteraction: true });
+            new Notification("⏰ " + texto, { body: "Es hora de cumplir tu tarea", requireInteraction: true });
         }
     }
 
     function eliminar(id) {
-        if(confirm("¿Borrar?")) db.ref('alarmas/' + id).remove();
+        if(confirm("¿Borrar alarma?")) db.ref('alarmas/' + id).remove();
     }
 
     Notification.requestPermission();
